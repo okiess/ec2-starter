@@ -1,17 +1,23 @@
 require "lib/ec2-starter"
 
-start_options = {
-  :access_key_id => "1FWCY02HG318RPREDQG2",
-  :secret_access_key => "T/0kFxHvMEmJ/ylac9bFdoefk4sRHc0oVUUZb82r",
-  :server => "eu-west-1.ec2.amazonaws.com",
-  :instance_type => "t1.micro",
-  :key_name => "gsg-keypair",
-  :availability_zone => "eu-west-1a",
-  :architecture => "x86_64"
+service_options = {
+  :access_key_id => "YOUR KEY",
+  :secret_access_key => "YOUR SECRET",
+  :server => "eu-west-1.ec2.amazonaws.com" # Target Zone
 }
 
-Ec2Starter.start 'ami-7d95a209', start_options do
-  ip '46.137.173.240'
-  volume :volume_id => 'vol-16c5207f', :mount_point => '/dev/sdf'
-  command '/root/attach_volume.sh && sleep 5; sudo /etc/init.d/mysql stop; sleep 2; sudo killall mysqld; sleep 5 && sudo /etc/init.d/mysql start'
+start_options = {
+  :instance_type => "t1.micro",
+  :key_name => "YOUR KEY",
+  :availability_zone => "eu-west-1a",
+  :architecture => "x86_64",
+  :kernel_id => 'aki-4feec43b', # your kernel, remove if not needed
+  :ssh_user => 'deploy',
+  :ssh_keys => ['/Users/your_user/.ssh/your_key']
+}
+
+Ec2Starter.start 'YOUR AMI_ID', service_options, start_options do
+  ip 'YOUR ELASTIC IP'
+  volume :volume_id => 'YOUR VOLUME', :mount_point => '/dev/sdf'
+  command '/root/attach_volume.sh' # Shell command on the instance
 end

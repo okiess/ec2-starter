@@ -20,37 +20,44 @@ module Ec2Starter
         sleep 10 unless instance_state == 'running'
       end
 
-      result = ec2.associate_address(:instance_id => instance_id, :public_ip => @ec2_instance.ips.first)
-      if result["return"] == "true"
-        puts "=> Elastic IP: #{@ec2_instance.ips.first.white}"
+      if @ec2_instance.ips.size > 0
+        result = ec2.associate_address(:instance_id => instance_id, :public_ip => @ec2_instance.ips.first)
+        puts "=> Elastic IP: #{@ec2_instance.ips.first.white}" if result["return"] == "true"
+      else
+        skip_ip = true
+      end
+      if result["return"] == "true" or skip_ip
+        if @ec2_instance.volumes.size > 0
+          result = ec2.attach_volume(:volume_id => @ec2_instance.volumes.first[:volume_id], :instance_id => instance_id,
+           :device => @ec2_instance.volumes.first[:mount_point])
 
-        result = ec2.attach_volume(:volume_id => @ec2_instance.volumes.first[:volume_id], :instance_id => instance_id,
-          :device => @ec2_instance.volumes.first[:mount_point])
-
-        volume_state = nil
-        while(volume_state != 'attached')
-          volume_state = get_volume_state(@ec2_instance.volumes.first[:volume_id])
-          puts "=> Checking for attachment state... #{output_running_state(volume_state)}"
-          sleep 10 unless volume_state == 'attached'
-        end
-
-        puts "=> EBS Volume attached: #{@ec2_instance.volumes.first[:volume_id]}"
-
-        system("ssh-keygen -R #{@ec2_instance.ips.first}")
-        i = 0
-        while(i < 3) do
-          begin
-            ssh
-            break
-          rescue => e
-            puts e.message
-            puts "Retrying in 10sec..."
-            sleep 10
+          volume_state = nil
+          while(volume_state != 'attached')
+            volume_state = get_volume_state(@ec2_instance.volumes.first[:volume_id])
+            puts "=> Checking for attachment state... #{output_running_state(volume_state)}"
+            sleep 10 unless volume_state == 'attached'
           end
-          i += 1
+
+          success = true
+          puts "=> EBS Volume attached: #{@ec2_instance.volumes.first[:volume_id]}"
         end
-        success = true
-        puts "=> SSH Commands were executed!"
+        if @ec2_instance.commands.size > 0
+          system("ssh-keygen -R #{@ec2_instance.ips.first}")
+          i = 0
+          while(i < 3) do
+            begin
+              ssh
+              break
+            rescue => e
+              puts e.message
+              puts "Retrying in 10sec..."
+              sleep 10
+            end
+            i += 1
+          end
+          success = true
+          puts "=> SSH Commands were executed!"
+        end
       else
         puts "=> Could not assign Elastic IP!"
       end
@@ -62,15 +69,16 @@ module Ec2Starter
     end
 
     def ssh
-      Net::SSH.start(@ec2_instance.ips.first, "deploy", :keys => ['/Users/oliver/.ssh/id_rsa-gsg-keypair.eu']) do |ssh|
+      Net::SSH.start(@ec2_instance.ips.first, @ec2_instance.default_options[:ssh_user],
+        :keys => @ec2_instance.default_options[:ssh_keys]) do |ssh|
         ssh.sudo nil, @ec2_instance.commands.first
       end
     end
 
     def ec2
-       @ec2 ||= AWS::EC2::Base.new(:access_key_id => @ec2_instance.default_options[:access_key_id],
-        :secret_access_key => @ec2_instance.default_options[:secret_access_key],
-        :server => @ec2_instance.default_options[:server])
+       @ec2 ||= AWS::EC2::Base.new(:access_key_id => @ec2_instance.service_options[:access_key_id],
+        :secret_access_key => @ec2_instance.service_options[:secret_access_key],
+        :server => @ec2_instance.service_options[:server])
     end
 
     def get_instance_state(instance_id)
