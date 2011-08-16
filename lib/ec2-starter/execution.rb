@@ -1,6 +1,6 @@
 module Ec2Starter
   class Execution
-    attr_accessor :ec2_instance
+    attr_accessor :ec2_instance, :dns_name
 
     def initialize(ec2_instance)
       @ec2_instance = ec2_instance
@@ -14,9 +14,9 @@ module Ec2Starter
 
       instance_state = nil
       while(instance_state != 'running')
-        instance_state, dns_name = get_instance_state(instance_id)
+        instance_state, @dns_name = get_instance_state(instance_id)
         puts "=> Checking for running state... #{output_running_state(instance_state)}"
-        puts "=> Public DNS: #{dns_name.white}" if instance_state == 'running'
+        puts "=> Public DNS: #{@dns_name.white}" if instance_state == 'running'
         sleep 10 unless instance_state == 'running'
       end
 
@@ -42,7 +42,8 @@ module Ec2Starter
           puts "=> EBS Volume attached: #{@ec2_instance.volumes.first[:volume_id]}"
         end
         if @ec2_instance.commands.size > 0
-          system("ssh-keygen -R #{@ec2_instance.ips.first}")
+          ip = @ec2_instance.ips.first || @dns_name
+          system("ssh-keygen -R #{ip}")
           i = 0
           while(i < 3) do
             begin
@@ -69,9 +70,16 @@ module Ec2Starter
     end
 
     def ssh
-      Net::SSH.start(@ec2_instance.ips.first, @ec2_instance.default_options[:ssh_user],
-        :keys => @ec2_instance.default_options[:ssh_keys]) do |ssh|
-        ssh.sudo nil, @ec2_instance.commands.first
+      ip = @ec2_instance.ips.first || @dns_name
+      Net::SSH.start(ip, @ec2_instance.default_options[:ssh_user], :keys => @ec2_instance.default_options[:ssh_keys]) do |ssh|
+        @ec2_instance.commands.each do |command|
+          if command.is_a?(String)
+            ssh.exec(command)
+          elsif command.is_a?(Hash) and command.include?(:sudo)
+            ssh.sudo @ec2_instance.default_options[:sudo_password], command[:sudo]
+          end
+        end
+        ssh.close
       end
     end
 
@@ -134,7 +142,7 @@ class String
 end
 
 class Net::SSH::Connection::Session
-  def sudo password, command
+  def sudo(password, command)
     exec %Q%echo "#{password}" | sudo -S #{command}% 
   end
 end

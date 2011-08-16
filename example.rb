@@ -14,10 +14,13 @@ start_options = {
   :kernel_id => 'aki-4feec43b', # your kernel, remove if not needed
   :ssh_user => 'deploy',
   :ssh_keys => ['/Users/your_user/.ssh/your_key']
+  :sudo_password => nil # set if necessary
 }
 
 Ec2Starter.start 'YOUR AMI_ID', service_options, start_options do
   ip 'YOUR ELASTIC IP'
   volume :volume_id => 'YOUR VOLUME', :mount_point => '/dev/sdf'
-  command '/root/attach_volume.sh' # Shell command on the instance
+  
+  command :sudo => '/root/attach_volume.sh' # Shell command on the instance
+  command '/home/your_user/some_script.sh'
 end
